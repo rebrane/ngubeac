@@ -18,6 +18,8 @@ To control which beacons are used, use the -b switch. Increasing the number adds
 
 Try increasing beam width or generation count for better results.
 
+Doing several runs starting from a random map often gives better results, especially with arrow beacons included.
+
 Beacon type is production by default. Set -t 0 for speed instead of production. Efficiency doesn't work yet.
 
 The 3 first maps are included. Instead you may provide a text file with an alternate map (to start from a certain set of beacons, or from a map that's not fully cleared).
