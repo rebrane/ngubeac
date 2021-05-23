@@ -16,7 +16,9 @@ Application Options:
 
 To control which beacons are used, use the -b switch. Increasing the number adds to the available beacons.
 
-Try increasing beam width or generation count for better results.
+Try increasing beam width or generation count for better results. You may want to set generations very high and just ^C after a few hundred.
+
+Doing several runs starting from a random map often gives better results, especially with arrow beacons included.
 
 Beacon type is production by default. Set -t 0 for speed instead of production. Efficiency doesn't work yet.
 
