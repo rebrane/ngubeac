@@ -12,6 +12,7 @@ static gint btype = 1;
 static gchar *filename = NULL;
 static gboolean randmap = FALSE;
 static gint mapn = 0;
+static gboolean single = FALSE;
 
 static GOptionEntry entries[] = {
     { "beacons", 'b', 0, G_OPTION_ARG_INT, &beacons, "Number of cell types to use: 2=box 3=knight 7=arrows 9=lines 10=donut", "N" },
@@ -21,6 +22,7 @@ static GOptionEntry entries[] = {
     { "map", 'm', 0, G_OPTION_ARG_INT, &mapn, "Map: 0=tutorial 1=flesh 2=tronne", "M" },
     { "file", 'f', 0, G_OPTION_ARG_FILENAME, &filename, "Filename", NULL },
     { "random", 'r', 0, G_OPTION_ARG_NONE, &randmap, "Randomize layout", NULL },
+    { "single", 's', 0, G_OPTION_ARG_NONE, &single, "Optimize a single square rather than the whole map", NULL },
     { NULL }   
 };
 
@@ -119,7 +121,7 @@ int bv[][5] = { { 40, 35, 26, 27, 23 },
                 { -15, -13, -7, -9, -8 } };
 
 char translate[] = " .*k<^>v|-o";
-#define B(a,b,c) if ((a)>=0 && (b)>=0 && (a)<m->x && (b)<m->y && score[(a)+((b)*m->x)]) score[(a)+((b)*m->x)] += c
+#define B(a,b,c) if ((a)>=0 && (b)>=0 && (a)<m->x && (b)<m->y && score[(a)+((b)*m->x)]) { if ((c)>0) { score[(a)+((b)*m->x)] += (c); } else { score[(a)+((b)*m->x)] = (score[(a)+((b)*m->x)] * (100-c)) / 100; } }
 /* Apply the bonus (if any) from the beacon at x,y to the score map */
 void apply_bonus(struct map *m, unsigned int *score, int x, int y)
 { 
@@ -270,7 +272,12 @@ unsigned int score(struct map *m)
 
     /* Calculate score */
     for (i=0; i<(m->x*m->y); i++) {
-        rv += score[i];
+	if (single) {
+	    if (score[i] > rv)
+		rv = score[i];
+	} else {
+            rv += score[i];
+	}
 	hash = (hash * 33) + m->map[i];
     }
 
@@ -294,6 +301,7 @@ struct map *neighbor(struct map *m, int nc, int n)
             if (n-- == 0) {
                 rv = copy_map(m);
 		rv->score = 0;
+		rv->hash = 0;
                 rv->map[x] += c;
                 if (rv->map[x] > nc) {
                     rv->map[x] -= nc;
@@ -326,15 +334,6 @@ gint map_cmp(struct map *a, struct map *b, gpointer c)
     if (b->score == 0)
         score(b);
     return b->score - a->score;
-}
-
-gint map_icmp(struct map *a, struct map *b, gpointer c)
-{
-    if (a->score == 0)
-        score(a);
-    if (b->score == 0)
-        score(b);
-    return a->score - b->score;
 }
 
 void
@@ -406,6 +405,8 @@ read_map(FILE *f)
     return m;
 }
 
+/* Randomize the beacons on the map. 50% of spaces will be left blank and 50%
+ * set to a random beacon. */
 void
 randomize_map(struct map *m)
 {
@@ -415,12 +416,6 @@ randomize_map(struct map *m)
 	    m->map[i] = g_random_boolean() ? 1 : g_random_int_range(1,beacons)+1;
 	}
     }
-}
-
-void show_winners(struct map *m, int *n)
-{
-    printf("%d: %d\n", ++(*n), m->score);
-    print_map(m);	
 }
 
 int main(int argc, char *argv[])
@@ -438,7 +433,6 @@ int main(int argc, char *argv[])
     struct map *orig ;
     int i=0;
     struct map *n;
-    GCompareDataFunc cmp;
     
     if (filename) {
 	orig = read_map(fopen(filename, "r"));
@@ -454,16 +448,10 @@ int main(int argc, char *argv[])
 	randomize_map(orig);
     }
 
-    if (btype == 2) {
-	cmp = (GCompareDataFunc) map_icmp;
-    } else {
-	cmp = (GCompareDataFunc) map_cmp;
-    }
-
     GHashTable *seen = g_hash_table_new_full(g_int_hash, g_int_equal, (GDestroyNotify)free, NULL);
     GSequence *g = g_sequence_new((GDestroyNotify)free_map);
     while ((n = neighbor(orig, beacons, i++)))  {
-	g_sequence_insert_sorted(g, n, cmp, NULL);
+	g_sequence_insert_sorted(g, n, (GCompareDataFunc)map_cmp, NULL);
     }
 
     struct map *champion = NULL;
