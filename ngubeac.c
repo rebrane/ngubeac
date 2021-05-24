@@ -346,9 +346,7 @@ iter_maps(struct map *m, struct beam *beam)
     struct map *mn;
     while ((mn = neighbor(m, beacons, i++)))  {
 	score(mn);
-	unsigned int *h = malloc(sizeof(unsigned int));
-	*h = mn->hash;
-	if (g_hash_table_add(beam->seen, h)) {
+	if (g_hash_table_add(beam->seen, mn->hash)) {
 		g_sequence_insert_sorted(beam->g, mn, (GCompareDataFunc)map_cmp, NULL);
 		beam->left--;
 	}
@@ -448,7 +446,7 @@ int main(int argc, char *argv[])
 	randomize_map(orig);
     }
 
-    GHashTable *seen = g_hash_table_new_full(g_int_hash, g_int_equal, (GDestroyNotify)free, NULL);
+    GHashTable *seen = g_hash_table_new(NULL, NULL);
     GSequence *g = g_sequence_new((GDestroyNotify)free_map);
     while ((n = neighbor(orig, beacons, i++)))  {
 	g_sequence_insert_sorted(g, n, (GCompareDataFunc)map_cmp, NULL);
@@ -458,11 +456,17 @@ int main(int argc, char *argv[])
     int bw = beamwidth;
     for (i=0; i<generations; i++) {
 	struct beam b;
+	GSequenceIter *p1, *p2;
 	b.g = g_sequence_new((GDestroyNotify)free_map);
 	b.seen = seen;
 	b.left = bw;
 
-	g_sequence_foreach(g, (GFunc)iter_maps, &b);
+	p1 = g_sequence_get_begin_iter(g);
+	while (b.left > 0) {
+		p2 = g_sequence_iter_move(p1, b.left+1);
+		g_sequence_foreach_range(p1, p2, (GFunc)iter_maps, &b);
+		p1 = g_sequence_iter_move(p2, 1);
+	}
 	g_sequence_free(g);
 	g = b.g;
 	
