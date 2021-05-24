@@ -1,9 +1,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 
 #include <glib.h>
 #include <gmodule.h>
+
+#define NGUIX	20
+#define NGUIY	17
 
 static gint beacons = 2;
 static gint beamwidth = 50;
@@ -26,7 +30,7 @@ static GOptionEntry entries[] = {
     { NULL }   
 };
 
-char maps[][20*17] = { { 
+char maps[][NGUIX*NGUIY] = { { 
 	0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,
 	0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,1,0,0,0,0,
 	0,0,0,0,0,0,0,1,0,1,1,0,0,0,1,1,1,1,1,0,
@@ -91,7 +95,7 @@ struct map {
     int x, y;
     char *map;
     unsigned int score;
-    unsigned long hash;
+    uint64_t hash;
 };
 
 void free_map(struct map *m)
@@ -121,7 +125,7 @@ int bv[][5] = { { 40, 35, 26, 27, 23 },
                 { -15, -13, -7, -9, -8 } };
 
 char translate[] = " .*k<^>v|-o";
-#define B(a,b,c) if ((a)>=0 && (b)>=0 && (a)<m->x && (b)<m->y && score[(a)+((b)*m->x)]) { if ((c)>0) { score[(a)+((b)*m->x)] += (c); } else { score[(a)+((b)*m->x)] = (score[(a)+((b)*m->x)] * (100-c)) / 100; } }
+#define B(a,b,c) if ((a)>=0 && (b)>=0 && (a)<m->x && (b)<m->y && score[(a)+((b)*m->x)]) score[(a)+((b)*m->x)] += (c)
 /* Apply the bonus (if any) from the beacon at x,y to the score map */
 void apply_bonus(struct map *m, unsigned int *score, int x, int y)
 { 
@@ -251,8 +255,8 @@ void apply_bonus(struct map *m, unsigned int *score, int x, int y)
 unsigned int score(struct map *m)
 {
     int i, j, rv = 0;
-    unsigned int score[20*17];
-    unsigned long hash = 0;
+    unsigned int score[NGUIX*NGUIY];
+    uint64_t hash = 0;
     
     /* Initialize score map */
     for (i=0; i<(m->x*m->y); i++) {
@@ -339,17 +343,16 @@ gint map_cmp(struct map *a, struct map *b, gpointer c)
 void
 iter_maps(struct map *m, struct beam *beam)
 {
-    if (beam->left <= 0)
-        return; 
+    if (!g_hash_table_add(beam->seen, (void *)m->hash)) {
+	return;
+    }
+
+    beam->left--;
 
     int i=0;
     struct map *mn;
     while ((mn = neighbor(m, beacons, i++)))  {
-	score(mn);
-	if (g_hash_table_add(beam->seen, mn->hash)) {
-		g_sequence_insert_sorted(beam->g, mn, (GCompareDataFunc)map_cmp, NULL);
-		beam->left--;
-	}
+	g_sequence_insert_sorted(beam->g, mn, (GCompareDataFunc)map_cmp, NULL);
     }
 }
 
@@ -357,12 +360,12 @@ struct map *
 read_map(FILE *f)
 {
     struct map *m = malloc(sizeof(struct map));
-    m->x = 20;
-    m->y = 17;
+    m->x = NGUIX;
+    m->y = NGUIY;
     m->map = malloc(m->x*m->y);
 
     int n=0;
-    while (n < (20*17) && !feof(f)) {
+    while (n < (NGUIX*NGUIY) && !feof(f)) {
 	switch(fgetc(f)) {
 		case ' ':
 			m->map[n++] = 0;
@@ -436,10 +439,10 @@ int main(int argc, char *argv[])
 	orig = read_map(fopen(filename, "r"));
     } else {
 	orig = malloc(sizeof(struct map));
-	orig->x = 20;
-	orig->y = 17;
-	orig->map = malloc(20*17);
-	memcpy(orig->map, maps[mapn], 20*17);
+	orig->x = NGUIX;
+	orig->y = NGUIY;
+	orig->map = malloc(NGUIX*NGUIY);
+	memcpy(orig->map, maps[mapn], NGUIX*NGUIY);
     }
 
     if (randmap) {
@@ -462,7 +465,7 @@ int main(int argc, char *argv[])
 	b.left = bw;
 
 	p1 = g_sequence_get_begin_iter(g);
-	while (b.left > 0) {
+	while (b.left > 0 && !g_sequence_iter_is_end(p1)) {
 		p2 = g_sequence_iter_move(p1, b.left+1);
 		g_sequence_foreach_range(p1, p2, (GFunc)iter_maps, &b);
 		p1 = g_sequence_iter_move(p2, 1);
@@ -480,7 +483,7 @@ int main(int argc, char *argv[])
 
 	    bw = beamwidth;
 	} else {
-	    bw = (bw * 110) / 100;
+	    bw = (bw * 105) / 100;
 	}
 	putchar('.');
 	fflush(stdout);
